@@ -1,1 +1,1 @@
-thrift -r --gen java  echo_service.thrift
+thrift --gen java  rpc_thrift.services.thrift

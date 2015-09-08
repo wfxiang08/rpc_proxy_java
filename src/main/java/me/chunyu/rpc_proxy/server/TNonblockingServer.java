@@ -211,13 +211,15 @@ public class TNonblockingServer implements RequestHandler {
             try {
                 TMessage msg = in.readMessageBegin();
                 if (msg.type == MESSAGE_TYPE_HEART_BEAT) {
-                    LOGGER.info("GOT HEART_BEAT MESSAGE.....");
+//                    LOGGER.info("GOT HEART_BEAT MESSAGE.....");
                     ByteBuffer writeBuf = ByteBuffer.wrap(request);
                     frameBuffer.addWriteBuffer(writeBuf, null);
                     return true;
                 } else {
                     lastRequestTime.set(System.currentTimeMillis());
                     frameTrans.reset(request, 4, request.length - 4);
+
+                    LOGGER.info("Get Other Msg: " + msg.name);
                 }
             } catch (TException e) {
                 frameBuffer.addWriteBuffer(null, e);

@@ -1,7 +1,6 @@
 package me.chunyu.rpc_proxy;
 
-import me.chunyu.rpc_proxy.os.ExitHandler;
-import me.chunyu.rpc_proxy.os.ExitSignalListener;
+
 import me.chunyu.rpc_proxy.server.TNonblockingServer;
 import me.chunyu.rpc_proxy.zk.CuratorRegister;
 import me.chunyu.rpc_proxy.zk.ServiceEndpoint;
@@ -9,11 +8,11 @@ import org.apache.thrift.TProcessor;
 import org.apache.thrift.transport.TNonblockingServerSocket;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import sun.misc.Signal;
+
 
 import java.net.InetSocketAddress;
 
-public class GeneralRpcServer extends TNonblockingServer implements ExitSignalListener {
+public class GeneralRpcServer extends TNonblockingServer {
     protected final Logger LOGGER = LoggerFactory.getLogger(getClass().getName());
     protected String serviceName;
     protected String productName;
@@ -35,24 +34,23 @@ public class GeneralRpcServer extends TNonblockingServer implements ExitSignalLi
         setUp(config.workers, 5000);
 
         // sort out exit handler
-        ExitHandler exit = new ExitHandler();
-        exit.addListener(this);
-        Signal.handle(new Signal("INT"), exit);
-        Signal.handle(new Signal("TERM"), exit);
-
 
         String hostport = String.format("%s:%d", config.getFrontHost(), config.frontPort);
         String serviceId = ServiceEndpoint.getServiceId(hostport);
         endpoint = new ServiceEndpoint(productName, serviceName, serviceId, hostport);
         curator = new CuratorRegister(config.zkAddr);
         curator.getCurator().start();
+
+        Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
+            @Override
+            public void run() {
+                GeneralRpcServer.this.stop();
+            }
+        }));
     }
 
 
-    @Override
-    public void notifyExit() {
-        stop();
-    }
+
 
     @Override
     public void stop() {

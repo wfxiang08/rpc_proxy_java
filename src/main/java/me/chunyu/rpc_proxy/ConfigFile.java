@@ -82,7 +82,7 @@ public class ConfigFile {
                     frontPort = Integer.parseInt(value);
                 } else if ("ip_prefix".equals(key)) {
                     ipPrefix = value;
-                } else if ("workers".equals(key)) {
+                } else if ("worker_pool_size".equals(key)) {
                     workers = Integer.parseInt(value);
                 }
             }

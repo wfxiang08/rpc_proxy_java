@@ -135,7 +135,7 @@ public class FrameBuffer {
                 bufferR = ByteBuffer.allocate(frameSize + 4);
                 bufferR.putInt(frameSize);
 
-                LOGGER.info("Message Frame Size: " + frameSize);
+//                LOGGER.info("Message Frame Size: " + frameSize);
 
                 stateR = FrameBufferState.READING_FRAME;
             } else {
@@ -191,15 +191,15 @@ public class FrameBuffer {
                         byte[] response = bufferW.array();
                         final TMemoryInputTransport frameTrans = new TMemoryInputTransport(response, 4, response.length - 4);
                         final TBinaryProtocol in = new TBinaryProtocol(frameTrans);
-                        try {
-                            TMessage msg = in.readMessageBegin();
-                            LOGGER.info(String.format("Write Back: %s, %d,Seq: %d", msg.name, msg.type, msg.seqid));
-                        } catch (Exception e) {
+//                        try {
+//                            TMessage msg = in.readMessageBegin();
+//                            LOGGER.info(String.format("Write Back: %s, %d,Seq: %d", msg.name, msg.type, msg.seqid));
+//                        } catch (Exception e) {
+//
+//                        }
 
-                        }
 
-
-                        LOGGER.info("----> Write Frame Body: " + n);
+//                        LOGGER.info("----> Write Frame Body: " + n);
                     }
                 } catch (IOException e) {
                     LOGGER.warn("Got an IOException during write!", e);
