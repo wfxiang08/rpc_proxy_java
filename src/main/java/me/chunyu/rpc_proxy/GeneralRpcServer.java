@@ -15,10 +15,10 @@ import java.net.InetSocketAddress;
 public class GeneralRpcServer extends TNonblockingServer {
     protected final Logger LOGGER = LoggerFactory.getLogger(getClass().getName());
     protected String serviceName;
-    protected String productName;
+    protected String[] productNames;
     protected ConfigFile config;
 
-    protected ServiceEndpoint endpoint;
+    protected ServiceEndpoint[] endpoints;
     protected CuratorRegister curator;
 
     public GeneralRpcServer(TProcessor processor, String configPath) {
@@ -26,7 +26,7 @@ public class GeneralRpcServer extends TNonblockingServer {
         config = new ConfigFile(configPath);
 
         this.serviceName = config.service;
-        this.productName = config.productName;
+        this.productNames = config.productName.split(",");
 
         if (config.workers < 1) {
             throw new RuntimeException("Invalid Worker Number");
@@ -37,9 +37,16 @@ public class GeneralRpcServer extends TNonblockingServer {
 
         String hostport = String.format("%s:%d", config.getFrontHost(), config.frontPort);
         String serviceId = ServiceEndpoint.getServiceId(hostport);
-        endpoint = new ServiceEndpoint(productName, serviceName, serviceId, hostport);
+        endpoints = new ServiceEndpoint[this.productNames.length];
+        int i =0;
+        for (String productName: this.productNames) {
+            ServiceEndpoint endpoint = new ServiceEndpoint(productName, serviceName, serviceId, hostport);
+            endpoints[i] = endpoint;
+            i ++;
+        }
         curator = new CuratorRegister(config.zkAddr);
         curator.getCurator().start();
+
 
         Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
             @Override
@@ -102,9 +109,13 @@ public class GeneralRpcServer extends TNonblockingServer {
             // 在服务启动或停止时注册服务
             // TODO: 如果zk的session过期，如何重新注册呢? 如果出现异常又改如何处理呢?
             if (serving) {
-                endpoint.addServiceEndpoint(curator);
+                for (ServiceEndpoint endpoint: endpoints) {
+                    endpoint.addServiceEndpoint(curator);
+                }
             } else {
-                endpoint.deleteServiceEndpoint(curator);
+                for (ServiceEndpoint endpoint: endpoints) {
+                    endpoint.deleteServiceEndpoint(curator);
+                }
             }
         } catch(Exception e) {
             LOGGER.warn("Service Register Error", e);
