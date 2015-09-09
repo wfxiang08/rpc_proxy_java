@@ -6,14 +6,14 @@ import me.chunyu.rpc_proxy.zk.CuratorRegister;
 import me.chunyu.rpc_proxy.zk.ServiceEndpoint;
 import org.apache.thrift.TProcessor;
 import org.apache.thrift.transport.TNonblockingServerSocket;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 import java.net.InetSocketAddress;
 
 public class GeneralRpcServer extends TNonblockingServer {
-    protected final Logger LOGGER = Logger.getLogger(getClass().getName());
+    protected final Logger LOGGER = LoggerFactory.getLogger(getClass().getName());
     protected String serviceName;
     protected String productName;
     protected ConfigFile config;
@@ -81,7 +81,7 @@ public class GeneralRpcServer extends TNonblockingServer {
             InetSocketAddress address = new InetSocketAddress(config.getFrontHost(), config.frontPort);
             socket = new TNonblockingServerSocket(address);
         } catch (Exception e) {
-            LOGGER.log(Level.WARNING, "Socket Error: ", e);
+            LOGGER.warn("Socket Error: ", e);
             throw new RuntimeException(e.getMessage(), e.getCause());
         }
         // 设置Server Socket
@@ -107,7 +107,7 @@ public class GeneralRpcServer extends TNonblockingServer {
                 endpoint.deleteServiceEndpoint(curator);
             }
         } catch(Exception e) {
-            LOGGER.log(Level.WARNING, "Service Register Error", e);
+            LOGGER.warn("Service Register Error", e);
         }
     }
 }

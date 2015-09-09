@@ -13,8 +13,9 @@ import java.nio.ByteBuffer;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 
 
 /**
@@ -22,7 +23,7 @@ import java.util.logging.Logger;
  * 其他的线程负责处理具体的请求
  */
 public class TNonblockingServer implements RequestHandler {
-    protected final Logger LOGGER = Logger.getLogger(getClass().getName());
+    protected final Logger LOGGER = LoggerFactory.getLogger(getClass().getName());
 
 
     // 不能使用负数
@@ -104,7 +105,7 @@ public class TNonblockingServer implements RequestHandler {
             serverTransport.listen();
             return true;
         } catch (TTransportException ttx) {
-            LOGGER.log(Level.WARNING, "Failed to start listening on server socket!", ttx);
+            LOGGER.warn("Failed to start listening on server socket!", ttx);
             return false;
         }
     }
@@ -132,7 +133,7 @@ public class TNonblockingServer implements RequestHandler {
             selectAcceptThread_.start();
             return true;
         } catch (IOException e) {
-            LOGGER.log(Level.WARNING, "Failed to start selector thread!", e);
+            LOGGER.warn("Failed to start selector thread!", e);
             return false;
         }
     }
@@ -251,14 +252,14 @@ public class TNonblockingServer implements RequestHandler {
 
 
                     } catch (TException e) {
-                        LOGGER.log(Level.WARNING, "Exception Found: ", e);
+                        LOGGER.warn("Exception Found: ", e);
                         frameBuffer.addWriteBuffer(null, e);
                     }
                 }
             });
             return true;
         } catch (RejectedExecutionException rx) {
-            LOGGER.log(Level.WARNING, "ExecutorService rejected execution!", rx);
+            LOGGER.warn("ExecutorService rejected execution!", rx);
             return false;
         }
     }
