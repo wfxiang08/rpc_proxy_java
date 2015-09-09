@@ -221,7 +221,7 @@ public class TNonblockingServer implements RequestHandler {
                     lastRequestTime.set(System.currentTimeMillis());
                     frameTrans.reset(request, 4, request.length - 4);
 
-                    LOGGER.info("Get Other Msg: " + msg.name);
+//                    LOGGER.info("Get Other Msg: " + msg.name);
                 }
             } catch (TException e) {
                 frameBuffer.addWriteBuffer(null, e);
@@ -245,7 +245,7 @@ public class TNonblockingServer implements RequestHandler {
 
                         writeI32(response.len() - 4, response.get());
 
-                        LOGGER.info("--->Return Frame Size: " + (response.len() - 4));
+//                        LOGGER.info("--->Return Frame Size: " + (response.len() - 4));
                         ByteBuffer writeBuf = ByteBuffer.wrap(response.get(), 0, response.len());
 
                         frameBuffer.addWriteBuffer(writeBuf, null);
