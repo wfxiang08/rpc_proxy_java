@@ -3,8 +3,6 @@ package me.chunyu.rpc_proxy.server;
 import org.apache.thrift.transport.TNonblockingServerTransport;
 import org.apache.thrift.transport.TNonblockingTransport;
 import org.apache.thrift.transport.TTransportException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.channels.SelectionKey;
@@ -14,9 +12,11 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class SelectAcceptThread extends Thread {
-    protected final Logger LOGGER = LoggerFactory.getLogger(getClass().getName());
+    protected final Logger LOGGER = Logger.getLogger(getClass().getName());
 
     protected final TNonblockingServerTransport serverTransport;
     protected final Selector selector;
@@ -58,12 +58,12 @@ public class SelectAcceptThread extends Thread {
                 cleanupSelectionKey(selectionKey);
             }
         } catch (Throwable t) {
-            LOGGER.error("run() exiting due to uncaught error", t);
+            LOGGER.log(Level.WARNING, "run() exiting due to uncaught error", t);
         } finally {
             try {
                 selector.close();
             } catch (IOException e) {
-                LOGGER.error("Got an IOException while closing selector!", e);
+                LOGGER.log(Level.WARNING, "Got an IOException while closing selector!", e);
             }
             stopped.set(true);
         }
@@ -107,11 +107,11 @@ public class SelectAcceptThread extends Thread {
                     // 将数据写回Client
                     handleWrite(key);
                 } else {
-                    LOGGER.warn("Unexpected state in select! " + key.interestOps());
+                    LOGGER.log(Level.WARNING, "Unexpected state in select! " + key.interestOps());
                 }
             }
         } catch (IOException e) {
-            LOGGER.warn("Got an IOException while selecting!", e);
+            LOGGER.log(Level.WARNING, "Got an IOException while selecting!", e);
         }
     }
 
@@ -134,7 +134,7 @@ public class SelectAcceptThread extends Thread {
             clientKey.attach(frameBuffer);
 
         } catch (TTransportException tte) {
-            LOGGER.warn("Exception trying to accept!", tte);
+            LOGGER.log(Level.WARNING, "Exception trying to accept!", tte);
             tte.printStackTrace();
             if (clientKey != null) cleanupSelectionKey(clientKey);
             if (client != null) client.close();

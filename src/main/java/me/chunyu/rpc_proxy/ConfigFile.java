@@ -1,8 +1,8 @@
 package me.chunyu.rpc_proxy;
 
 import org.apache.commons.lang3.StringUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -14,7 +14,7 @@ import java.net.SocketException;
 import java.util.Enumeration;
 
 public class ConfigFile {
-    protected final Logger LOGGER = LoggerFactory.getLogger(getClass().getName());
+    protected final Logger LOGGER = Logger.getLogger(getClass().getName());
     String productName;
     String service;
 

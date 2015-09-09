@@ -7,14 +7,14 @@ import org.apache.thrift.TProcessor;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TMessage;
 import org.apache.thrift.transport.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 
 /**
@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * 其他的线程负责处理具体的请求
  */
 public class TNonblockingServer implements RequestHandler {
-    protected final Logger LOGGER = LoggerFactory.getLogger(getClass().getName());
+    protected final Logger LOGGER = Logger.getLogger(getClass().getName());
 
 
     // 不能使用负数
@@ -104,7 +104,7 @@ public class TNonblockingServer implements RequestHandler {
             serverTransport.listen();
             return true;
         } catch (TTransportException ttx) {
-            LOGGER.error("Failed to start listening on server socket!", ttx);
+            LOGGER.log(Level.WARNING, "Failed to start listening on server socket!", ttx);
             return false;
         }
     }
@@ -132,7 +132,7 @@ public class TNonblockingServer implements RequestHandler {
             selectAcceptThread_.start();
             return true;
         } catch (IOException e) {
-            LOGGER.error("Failed to start selector thread!", e);
+            LOGGER.log(Level.WARNING, "Failed to start selector thread!", e);
             return false;
         }
     }
@@ -211,11 +211,12 @@ public class TNonblockingServer implements RequestHandler {
             try {
                 TMessage msg = in.readMessageBegin();
                 if (msg.type == MESSAGE_TYPE_HEART_BEAT) {
-//                    LOGGER.info("GOT HEART_BEAT MESSAGE.....");
                     ByteBuffer writeBuf = ByteBuffer.wrap(request);
                     frameBuffer.addWriteBuffer(writeBuf, null);
                     return true;
                 } else {
+
+                    // 让后面的processor能重新开始读取Message
                     lastRequestTime.set(System.currentTimeMillis());
                     frameTrans.reset(request, 4, request.length - 4);
 
@@ -241,25 +242,35 @@ public class TNonblockingServer implements RequestHandler {
                     try {
                         processor.process(in, out);
 
-                        ByteBuffer frameSizeW = ByteBuffer.wrap(response.get(), 0, 4);
-                        frameSizeW.putInt(response.len() - 4); // 记录后面的Frame的长度
+                        writeI32(response.len() - 4, response.get());
+
+                        LOGGER.info("--->Return Frame Size: " + (response.len() - 4));
                         ByteBuffer writeBuf = ByteBuffer.wrap(response.get(), 0, response.len());
 
                         frameBuffer.addWriteBuffer(writeBuf, null);
 
 
                     } catch (TException e) {
-                        LOGGER.warn("Exception Found: ", e);
+                        LOGGER.log(Level.WARNING, "Exception Found: ", e);
                         frameBuffer.addWriteBuffer(null, e);
                     }
                 }
             });
             return true;
         } catch (RejectedExecutionException rx) {
-            LOGGER.warn("ExecutorService rejected execution!", rx);
+            LOGGER.log(Level.WARNING, "ExecutorService rejected execution!", rx);
             return false;
         }
     }
+
+
+    public void writeI32(int i32, byte[]i32out){
+        i32out[0] = (byte)(255 & i32 >> 24);
+        i32out[1] = (byte)(255 & i32 >> 16);
+        i32out[2] = (byte)(255 & i32 >> 8);
+        i32out[3] = (byte)(255 & i32);
+    }
+
 
     public boolean isServing() {
         return this.isServing;

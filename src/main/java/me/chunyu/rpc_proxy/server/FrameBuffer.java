@@ -1,21 +1,24 @@
 package me.chunyu.rpc_proxy.server;
 
 import org.apache.thrift.TException;
-import org.apache.thrift.protocol.TBinaryProtocol;
-import org.apache.thrift.protocol.TMessage;
-import org.apache.thrift.transport.TMemoryInputTransport;
 import org.apache.thrift.transport.TNonblockingTransport;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
-import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.LinkedList;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+import static org.fusesource.jansi.Ansi.ansi;
 
 public class FrameBuffer {
-    private final Logger LOGGER = LoggerFactory.getLogger(getClass().getName());
+    private static final Logger LOG = Logger.getLogger(FrameBuffer.class.getName());
+
 
     protected static final AtomicLong readBufferBytesAllocated = new AtomicLong(0);
 
@@ -32,21 +35,31 @@ public class FrameBuffer {
 
     // the ByteBuffer we'll be using to write and read, depending on the state
     protected ByteBuffer bufferR;
-    protected ByteBuffer frameSizeW;
     protected ByteBuffer frameSizeR;
 
-    protected ConcurrentLinkedDeque<ByteBuffer> buffersW;
+    protected ReentrantLock bufferWriteLock = new ReentrantLock();
+    protected LinkedList<ByteBuffer> buffersW;
 
 
+    /**
+     * 将处理完毕的请求交给: FrameBuffer
+     * @param writeBuf
+     * @param exp
+     */
     public void addWriteBuffer(ByteBuffer writeBuf, TException exp) {
-        if (writeBuf != null) {
-            buffersW.add(writeBuf);
-            // 开启读写
-            selectionKey.interestOps(SelectionKey.OP_WRITE | SelectionKey.OP_READ);
+        bufferWriteLock.lock();
+        try {
+            if (writeBuf != null) {
+                buffersW.addLast(writeBuf);
+                // 开启读写
+                selectionKey.interestOps(SelectionKey.OP_WRITE | SelectionKey.OP_READ);
 
-        } else if (exp != null) {
-            stateW = FrameBufferState.AWAITING_CLOSE;
-            requestSelectInterestChange();
+            } else if (exp != null) {
+                stateW = FrameBufferState.AWAITING_CLOSE;
+                requestSelectInterestChange();
+            }
+        } finally {
+            bufferWriteLock.unlock();
         }
 
 
@@ -63,27 +76,19 @@ public class FrameBuffer {
         this.selectionKey = selectionKey;
         this.selectThread = selectThread;
 
-        buffersW = new ConcurrentLinkedDeque<ByteBuffer>();
+        buffersW = new LinkedList<ByteBuffer>();
         frameSizeR = ByteBuffer.allocate(4);
-        frameSizeW = ByteBuffer.allocate(4);
+
 
         this.maxReadBufferSize = maxReadBufferSize;
 
     }
 
-    /**
-     * Check if this FrameBuffer has a full frame read.
-     */
     public boolean isFrameFullyRead() {
         return stateR == FrameBufferState.READ_FRAME_COMPLETE;
     }
 
     /**
-     * Give this FrameBuffer a chance to read. The selector loop should have
-     * received a read event for this FrameBuffer.
-     *
-     * @return true if the connection should live on, false if it should be
-     * closed
      * 两种状态下: 才能判断一个Frame是否读取完毕: {#link #read() }
      * read()返回true, 表示数据读取正常, {@link #isFrameFullyRead()}
      */
@@ -107,7 +112,7 @@ public class FrameBuffer {
                 // pull out the frame size as an integer.
                 int frameSize = frameSizeR.getInt(0);
                 if (frameSize <= 0) {
-                    LOGGER.error("Read an invalid frame size of " + frameSize
+                    LOG.log(Level.WARNING, "Read an invalid frame size of " + frameSize
                             + ". Are you using TFramedTransport on the client side?");
                     return false;
                 }
@@ -116,7 +121,7 @@ public class FrameBuffer {
                 // error and close the connection.
                 // 直接关闭connection
                 if (frameSize > maxReadBufferSize) {
-                    LOGGER.error("Read a frame size of " + frameSize
+                    LOG.log(Level.WARNING, "Read a frame size of " + frameSize
                             + ", which is bigger than the maximum allowable buffer size for ALL connections.");
                     return false;
                 }
@@ -166,7 +171,7 @@ public class FrameBuffer {
         }
 
         // if we fall through to this point, then the state must be invalid.
-        LOGGER.error("Read was called but state is invalid (" + stateR + ")");
+        LOG.log(Level.WARNING, "Read was called but state is invalid (" + stateR + ")");
         return false;
     }
 
@@ -179,38 +184,48 @@ public class FrameBuffer {
      */
     public boolean write() {
         if (stateW == FrameBufferState.WRITING) {
-            ByteBuffer bufferW = buffersW.peek();
+            ByteBuffer bufferW = null;
+
+            bufferWriteLock.lock();
+            bufferW = buffersW.peek();
+            bufferWriteLock.unlock();
+
             if (bufferW != null) {
+                int n;
                 try {
                     // 可以考虑将多个bufferW合并放在一个 tcp package中，减少系统调用
-                    int n;
                     if ((n = trans.write(bufferW)) < 0) {
+                        LOG.log(Level.WARNING, ansi().render("@|red Buffer Write Error |@").toString());
                         return false;
-                    } else {
-
-                        byte[] response = bufferW.array();
-                        final TMemoryInputTransport frameTrans = new TMemoryInputTransport(response, 4, response.length - 4);
-                        final TBinaryProtocol in = new TBinaryProtocol(frameTrans);
-//                        try {
-//                            TMessage msg = in.readMessageBegin();
-//                            LOGGER.info(String.format("Write Back: %s, %d,Seq: %d", msg.name, msg.type, msg.seqid));
-//                        } catch (Exception e) {
-//
-//                        }
-
-
-//                        LOGGER.info("----> Write Frame Body: " + n);
                     }
                 } catch (IOException e) {
-                    LOGGER.warn("Got an IOException during write!", e);
+                    LOG.log(Level.WARNING, "Got an IOException during write!", e);
                     return false;
                 }
 
                 // 如果当前的Node已经处理完毕，则直接输出
                 if (!bufferW.hasRemaining()) {
+                    bufferWriteLock.lock();
                     buffersW.pop();
-                }
+                    bufferWriteLock.unlock();
 
+//                    if (bufferW.limit() > 4000) {
+//                        LOG.info(ansi().render("@|red Buffer write completely, Write: " + n + ", Remains: " + bufferW.remaining() + "|@").toString());
+//
+//                        try {
+//
+//                            File file = new File("/root/workspace/similar_problems/lib/python/bb.dt");
+//                            FileOutputStream stream = new FileOutputStream(file);
+//                            stream.write(bufferW.array(), 0, bufferW.limit());
+//                            stream.close();
+//                        } catch (Exception e) {
+//
+//                        }
+//                    }
+
+                } else {
+                    LOG.info(ansi().render("@|red Buffer is not write completely, wait for next round....., Write: " + n + ", Remains: " + bufferW.remaining() + "|@").toString());
+                }
             } else {
                 // 如果没有数据输出，则暂停Write(下一轮就能看到效果)
                 selectionKey.interestOps(SelectionKey.OP_READ);
@@ -218,7 +233,7 @@ public class FrameBuffer {
             return true;
         }
 
-        LOGGER.error("Write was called, but state is invalid (" + stateW + ")");
+        LOG.log(Level.WARNING, "Write was called, but state is invalid (" + stateW + ")");
         return false;
     }
 
@@ -260,7 +275,7 @@ public class FrameBuffer {
             }
             return true;
         } catch (IOException e) {
-            LOGGER.warn("Got an IOException in internalRead!", e);
+            LOG.log(Level.WARNING, "Got an IOException in internalRead!", e);
             return false;
         }
     }
