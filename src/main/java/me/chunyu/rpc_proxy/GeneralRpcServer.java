@@ -4,13 +4,22 @@ package me.chunyu.rpc_proxy;
 import me.chunyu.rpc_proxy.server.TNonblockingServer;
 import me.chunyu.rpc_proxy.zk.CuratorRegister;
 import me.chunyu.rpc_proxy.zk.ServiceEndpoint;
+import org.apache.curator.framework.CuratorFramework;
+import org.apache.curator.framework.api.CuratorEvent;
+import org.apache.curator.framework.api.CuratorListener;
 import org.apache.thrift.TProcessor;
 import org.apache.thrift.transport.TNonblockingServerSocket;
+import org.apache.zookeeper.WatchedEvent;
+import org.apache.zookeeper.Watcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
 import java.net.InetSocketAddress;
+import java.util.Timer;
+import java.util.TimerTask;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class GeneralRpcServer extends TNonblockingServer {
     protected String serviceName;
@@ -19,6 +28,8 @@ public class GeneralRpcServer extends TNonblockingServer {
 
     protected ServiceEndpoint[] endpoints;
     protected CuratorRegister curator;
+
+    protected AtomicBoolean sessionExpired = new AtomicBoolean();
 
     public GeneralRpcServer(TProcessor processor, String configPath) {
         super(processor);
@@ -37,15 +48,37 @@ public class GeneralRpcServer extends TNonblockingServer {
         String hostport = String.format("%s:%d", config.getFrontHost(), config.frontPort);
         String serviceId = ServiceEndpoint.getServiceId(hostport);
         endpoints = new ServiceEndpoint[this.productNames.length];
-        int i =0;
-        for (String productName: this.productNames) {
+        int i = 0;
+        for (String productName : this.productNames) {
             ServiceEndpoint endpoint = new ServiceEndpoint(productName, serviceName, serviceId, hostport);
             endpoints[i] = endpoint;
-            i ++;
+            i++;
         }
         curator = new CuratorRegister(config.zkAddr);
         curator.getCurator().start();
+        curator.getCurator().getCuratorListenable().addListener(new CuratorListener() {
+            @Override
+            public void eventReceived(CuratorFramework client, CuratorEvent event) throws Exception {
+                WatchedEvent we = event.getWatchedEvent();
+                // 现在注册服务作为唯一的zk用户，需要想办法Driver Zk的状态的迁移
+                if (we.getState() == Watcher.Event.KeeperState.Expired || we.getState() == Watcher.Event.KeeperState.Disconnected) {
+                    sessionExpired.set(true);
+                    LOG.error(Colors.red("!!!!! Zookeeper Session Expired......"));
+                }
+            }
+        });
 
+        // 每2s重复一次, 发现Session过期，连接断开等就重新注册
+        new Timer().schedule(new TimerTask() {
+            @Override
+            public void run() {
+                // 如果Session过期，则重新注册
+                if (sessionExpired.getAndSet(false)) {
+                    LOG.error(Colors.red("!!!!! Zookeeper updateServiceEndpoint......"));
+                    updateServiceEndpoint();
+                }
+            }
+        }, 2000, 2000);
 
         Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
             @Override
@@ -53,9 +86,9 @@ public class GeneralRpcServer extends TNonblockingServer {
                 GeneralRpcServer.this.stop();
             }
         }));
+
+
     }
-
-
 
 
     @Override
@@ -104,19 +137,26 @@ public class GeneralRpcServer extends TNonblockingServer {
         }
 
         super.setServing(serving);
+
+        updateServiceEndpoint();
+    }
+
+    void updateServiceEndpoint() {
+        // CreateBuilderImpl#pathInForeground 通过不停地Retry, 来保证我们的任务能完成
+        // RetryLoop.callWithRetry
         try {
             // 在服务启动或停止时注册服务
             // TODO: 如果zk的session过期，如何重新注册呢? 如果出现异常又改如何处理呢?
-            if (serving) {
-                for (ServiceEndpoint endpoint: endpoints) {
+            if (isServing()) {
+                for (ServiceEndpoint endpoint : endpoints) {
                     endpoint.addServiceEndpoint(curator);
                 }
             } else {
-                for (ServiceEndpoint endpoint: endpoints) {
+                for (ServiceEndpoint endpoint : endpoints) {
                     endpoint.deleteServiceEndpoint(curator);
                 }
             }
-        } catch(Exception e) {
+        } catch (Exception e) {
             LOG.warn("Service Register Error", e);
         }
     }

@@ -13,9 +13,9 @@ import java.nio.ByteBuffer;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 
 
 /**
@@ -37,7 +37,7 @@ public class TNonblockingServer implements RequestHandler {
     /**
      * 是否正在对外启动服务
      */
-    private boolean isServing;
+    private AtomicBoolean isServing = new AtomicBoolean();
 
     protected TServerTransport serverTransport;
 
@@ -265,20 +265,20 @@ public class TNonblockingServer implements RequestHandler {
     }
 
 
-    public void writeI32(int i32, byte[]i32out){
-        i32out[0] = (byte)(255 & i32 >> 24);
-        i32out[1] = (byte)(255 & i32 >> 16);
-        i32out[2] = (byte)(255 & i32 >> 8);
-        i32out[3] = (byte)(255 & i32);
+    public void writeI32(int i32, byte[] i32out) {
+        i32out[0] = (byte) (255 & i32 >> 24);
+        i32out[1] = (byte) (255 & i32 >> 16);
+        i32out[2] = (byte) (255 & i32 >> 8);
+        i32out[3] = (byte) (255 & i32);
     }
 
 
     public boolean isServing() {
-        return this.isServing;
+        return this.isServing.get();
     }
 
     protected void setServing(boolean serving) {
-        this.isServing = serving;
+        this.isServing.set(serving);
     }
 
 }
