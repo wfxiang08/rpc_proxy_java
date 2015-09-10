@@ -1,5 +1,6 @@
 package me.chunyu.rpc_proxy.server;
 
+import me.chunyu.rpc_proxy.Colors;
 import org.apache.thrift.TException;
 import org.apache.thrift.transport.TNonblockingTransport;
 import org.slf4j.Logger;
@@ -46,6 +47,7 @@ public class FrameBuffer {
      * @param exp
      */
     public void addWriteBuffer(ByteBuffer writeBuf, TException exp) {
+//        LOG.info(Colors.green("addWriteBuffer Begin"));
         bufferWriteLock.lock();
         try {
             if (writeBuf != null) {
@@ -55,12 +57,13 @@ public class FrameBuffer {
 
             } else if (exp != null) {
                 stateW = FrameBufferState.AWAITING_CLOSE;
-                requestSelectInterestChange();
             }
+            requestSelectInterestChange();
         } finally {
             bufferWriteLock.unlock();
         }
 
+//        LOG.info(Colors.green("addWriteBuffer Over"));
 
     }
 
@@ -139,7 +142,7 @@ public class FrameBuffer {
                 bufferR = ByteBuffer.allocate(frameSize + 4);
                 bufferR.putInt(frameSize);
 
-//                LOGGER.info("Message Frame Size: " + frameSize);
+//                LOG.info("Message Frame Size: " + frameSize);
 
                 stateR = FrameBufferState.READING_FRAME;
             } else {
@@ -182,6 +185,8 @@ public class FrameBuffer {
      * Give this FrameBuffer a chance to write its output to the final client.
      */
     public boolean write() {
+//        LOG.info(Colors.green("write begin"));
+
         if (stateW == FrameBufferState.WRITING) {
             ByteBuffer bufferW = null;
 
@@ -190,6 +195,8 @@ public class FrameBuffer {
             bufferWriteLock.unlock();
 
             if (bufferW != null) {
+//                LOG.info(Colors.red("bufferW Write"));
+
                 int n;
                 try {
                     // 可以考虑将多个bufferW合并放在一个 tcp package中，减少系统调用
@@ -209,29 +216,19 @@ public class FrameBuffer {
                     bufferWriteLock.unlock();
 
                 } else {
-                    LOG.info(ansi().render("@|red Buffer is not write completely, wait for next round....., Write: " + n + ", Remains: " + bufferW.remaining() + "|@").toString());
+                    LOG.info(ansi().render("@|red Buffer is not write completely, wait for next round....., Write: " + n
+                            + ", Remains: " + bufferW.remaining() + "|@").toString());
                 }
             } else {
                 // 如果没有数据输出，则暂停Write(下一轮就能看到效果)
                 selectionKey.interestOps(SelectionKey.OP_READ);
+                requestSelectInterestChange();
             }
             return true;
         }
 
         LOG.warn("Write was called, but state is invalid (" + stateW + ")");
         return false;
-    }
-
-    /**
-     * Give this FrameBuffer a chance to set its interest to write, once data
-     * has come in.
-     */
-    public void changeSelectInterests() {
-        // 状态迁移(现在似乎没有什么要迁移的)
-        if (stateW == FrameBufferState.AWAITING_CLOSE) {
-            close();
-            selectionKey.cancel();
-        }
     }
 
     /**
@@ -265,18 +262,29 @@ public class FrameBuffer {
         }
     }
 
-    /**
-     * When this FrameBuffer needs to change its select interests and execution
-     * might not be in its select thread, then this method will make sure the
-     * interest change gets done when the select thread wakes back up. When the
-     * current thread is this FrameBuffer's select thread, then it just does the
-     * interest change immediately.
-     */
+
     protected void requestSelectInterestChange() {
+        // 如果当前的线程是: selectThread, 那么当前的状态肯定不是在等待select, 所以SI(select interest)的修改在下一轮会及时生效
+        // 但是如果是其他线程修改: SI, 那么由于SelectThread可能还在select, 甚至永远处于select状态，因此需要特别处理（交给selectThread)
+        // 最初设计的目的:
+        //    处理 Transport的读: header, body, 写: header, body等状态的迁移
+        // 现在: FrameBuffer将读写分离，因此 requestSelectInterestChange 则负责将"修改后的状态"让select尽可能快地感知
         if (Thread.currentThread() == this.selectThread) {
             changeSelectInterests();
         } else {
             this.selectThread.requestSelectInterestChange(this);
         }
     }
-} // FrameBuffer
+
+    /**
+     * Give this FrameBuffer a chance to set its interest to write, once data
+     * has come in.
+     */
+    public void changeSelectInterests() {
+        // 状态迁移(现在似乎没有什么要迁移的)
+        if (stateW == FrameBufferState.AWAITING_CLOSE) {
+            close();
+            selectionKey.cancel();
+        }
+    }
+}

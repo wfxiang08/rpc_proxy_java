@@ -13,7 +13,6 @@ import org.slf4j.LoggerFactory;
 import java.net.InetSocketAddress;
 
 public class GeneralRpcServer extends TNonblockingServer {
-    protected final Logger LOGGER = LoggerFactory.getLogger(getClass().getName());
     protected String serviceName;
     protected String[] productNames;
     protected ConfigFile config;
@@ -68,7 +67,7 @@ public class GeneralRpcServer extends TNonblockingServer {
         // 然后等待结束服务:
         while (System.currentTimeMillis() - lastRequestTime.get() < 5000) {
             try {
-                LOGGER.info("Sleeping 1 seconds");
+                LOG.info("Sleeping 1 seconds");
                 Thread.sleep(1000);
             } catch (Exception e) {
                 //
@@ -88,7 +87,7 @@ public class GeneralRpcServer extends TNonblockingServer {
             InetSocketAddress address = new InetSocketAddress(config.getFrontHost(), config.frontPort);
             socket = new TNonblockingServerSocket(address);
         } catch (Exception e) {
-            LOGGER.warn("Socket Error: ", e);
+            LOG.warn("Socket Error: ", e);
             throw new RuntimeException(e.getMessage(), e.getCause());
         }
         // 设置Server Socket
@@ -118,7 +117,7 @@ public class GeneralRpcServer extends TNonblockingServer {
                 }
             }
         } catch(Exception e) {
-            LOGGER.warn("Service Register Error", e);
+            LOG.warn("Service Register Error", e);
         }
     }
 }

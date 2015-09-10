@@ -1,5 +1,6 @@
 package me.chunyu.rpc_proxy.server;
 
+import me.chunyu.rpc_proxy.Colors;
 import org.apache.thrift.transport.TNonblockingServerTransport;
 import org.apache.thrift.transport.TNonblockingTransport;
 import org.apache.thrift.transport.TTransportException;
@@ -12,13 +13,16 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class SelectAcceptThread extends Thread {
-    protected final Logger LOGGER = LoggerFactory.getLogger(getClass().getName());
+    protected final Logger LOG = LoggerFactory.getLogger(getClass().getName());
 
-    protected final TNonblockingServerTransport serverTransport;
+    // 负责监听"新的Client"的请求, 请求成功之后建立一个连接, FrameBuffer
+    protected final TNonblockingServerTransport acceptSocket;
+
     protected final Selector selector;
     protected final Set<FrameBuffer> selectInterestChanges = new HashSet<FrameBuffer>();
 
@@ -27,14 +31,13 @@ public class SelectAcceptThread extends Thread {
 
     protected final int maxReadBufferSize;
 
-    public SelectAcceptThread(final TNonblockingServerTransport serverTransport, RequestHandler handler,
+    public SelectAcceptThread(final TNonblockingServerTransport acceptSocket, RequestHandler handler,
                               AtomicBoolean stopped, int maxReadBufferSize) throws IOException {
 
-        this.serverTransport = serverTransport;
+        this.acceptSocket = acceptSocket;
 
-        // 创建selector, 并将serverTransport注册到selector上
         this.selector = SelectorProvider.provider().openSelector();
-        this.serverTransport.registerSelector(this.selector);
+        this.acceptSocket.registerSelector(this.selector);
 
         this.handler = handler;
 
@@ -58,12 +61,12 @@ public class SelectAcceptThread extends Thread {
                 cleanupSelectionKey(selectionKey);
             }
         } catch (Throwable t) {
-            LOGGER.warn("run() exiting due to uncaught error", t);
+            LOG.warn("run() exiting due to uncaught error", t);
         } finally {
             try {
                 selector.close();
             } catch (IOException e) {
-                LOGGER.warn("Got an IOException while closing selector!", e);
+                LOG.warn("Got an IOException while closing selector!", e);
             }
             stopped.set(true);
         }
@@ -107,11 +110,11 @@ public class SelectAcceptThread extends Thread {
                     // 将数据写回Client
                     handleWrite(key);
                 } else {
-                    LOGGER.warn("Unexpected state in select! " + key.interestOps());
+                    LOG.warn("Unexpected state in select! " + key.interestOps());
                 }
             }
         } catch (IOException e) {
-            LOGGER.warn("Got an IOException while selecting!", e);
+            LOG.warn("Got an IOException while selecting!", e);
         }
     }
 
@@ -124,20 +127,27 @@ public class SelectAcceptThread extends Thread {
         SelectionKey clientKey = null;
         TNonblockingTransport client = null;
         try {
-            // accept the connection
-            client = (TNonblockingTransport) serverTransport.accept();
+            // 1. 首先创建一个Connection, 它刚开始只关注: Read
+            client = (TNonblockingTransport) acceptSocket.accept();
             clientKey = client.registerSelector(selector, SelectionKey.OP_READ);
 
+//            LOG.info(Colors.red("Accept a New Client"));
+
             // clientKey 和 Transport等对应关系，通过 clientKey的attach来实现的
-            FrameBuffer frameBuffer = new FrameBuffer(client, clientKey, SelectAcceptThread.this,
-                    maxReadBufferSize);
+            // 2. 为对应的 client添加FrameBuffer
+            FrameBuffer frameBuffer = new FrameBuffer(client, clientKey, SelectAcceptThread.this, maxReadBufferSize);
             clientKey.attach(frameBuffer);
 
         } catch (TTransportException tte) {
-            LOGGER.warn("Exception trying to accept!", tte);
+            LOG.warn("Exception trying to accept!", tte);
             tte.printStackTrace();
-            if (clientKey != null) cleanupSelectionKey(clientKey);
-            if (client != null) client.close();
+
+            if (clientKey != null) {
+                cleanupSelectionKey(clientKey);
+            }
+            if (client != null) {
+                client.close();
+            }
         }
     }
 
@@ -148,13 +158,15 @@ public class SelectAcceptThread extends Thread {
      */
     protected void handleRead(SelectionKey key) {
         FrameBuffer buffer = (FrameBuffer) key.attachment();
+
+        // 如果数据读取过程中出现错误，关闭selector中对应的连接
         if (!buffer.read()) {
             cleanupSelectionKey(key);
-            return;
+
         } else if (buffer.isFrameFullyRead()) {
             // 成功读取完毕一条记录之后，开始处理关键点:
             // buffer在此时的状态
-//            LOGGER.info("Get A New Request");
+            LOG.info(Colors.red("Get a New Request"));
             if (!this.handler.requestInvoke(buffer)) {
                 cleanupSelectionKey(key);
             }

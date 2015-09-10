@@ -23,7 +23,7 @@ import org.slf4j.LoggerFactory;
  * 其他的线程负责处理具体的请求
  */
 public class TNonblockingServer implements RequestHandler {
-    protected final Logger LOGGER = LoggerFactory.getLogger(getClass().getName());
+    protected final Logger LOG = LoggerFactory.getLogger(getClass().getName());
 
 
     // 不能使用负数
@@ -105,7 +105,7 @@ public class TNonblockingServer implements RequestHandler {
             serverTransport.listen();
             return true;
         } catch (TTransportException ttx) {
-            LOGGER.warn("Failed to start listening on server socket!", ttx);
+            LOG.warn("Failed to start listening on server socket!", ttx);
             return false;
         }
     }
@@ -133,7 +133,7 @@ public class TNonblockingServer implements RequestHandler {
             selectAcceptThread_.start();
             return true;
         } catch (IOException e) {
-            LOGGER.warn("Failed to start selector thread!", e);
+            LOG.warn("Failed to start selector thread!", e);
             return false;
         }
     }
@@ -221,7 +221,7 @@ public class TNonblockingServer implements RequestHandler {
                     lastRequestTime.set(System.currentTimeMillis());
                     frameTrans.reset(request, 4, request.length - 4);
 
-//                    LOGGER.info("Get Other Msg: " + msg.name);
+//                    LOG.info("Get Other Msg: " + msg.name);
                 }
             } catch (TException e) {
                 frameBuffer.addWriteBuffer(null, e);
@@ -245,21 +245,21 @@ public class TNonblockingServer implements RequestHandler {
 
                         writeI32(response.len() - 4, response.get());
 
-//                        LOGGER.info("--->Return Frame Size: " + (response.len() - 4));
+//                        LOG.info("--->Return Frame Size: " + (response.len() - 4));
                         ByteBuffer writeBuf = ByteBuffer.wrap(response.get(), 0, response.len());
 
                         frameBuffer.addWriteBuffer(writeBuf, null);
 
 
                     } catch (TException e) {
-                        LOGGER.warn("Exception Found: ", e);
+                        LOG.warn("Exception Found: ", e);
                         frameBuffer.addWriteBuffer(null, e);
                     }
                 }
             });
             return true;
         } catch (RejectedExecutionException rx) {
-            LOGGER.warn("ExecutorService rejected execution!", rx);
+            LOG.warn("ExecutorService rejected execution!", rx);
             return false;
         }
     }
