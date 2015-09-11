@@ -1,6 +1,5 @@
 package me.chunyu.rpc_proxy;
 
-
 import me.chunyu.rpc_proxy.server.TNonblockingServer;
 import me.chunyu.rpc_proxy.zk.CuratorRegister;
 import me.chunyu.rpc_proxy.zk.ServiceEndpoint;
@@ -11,14 +10,12 @@ import org.apache.thrift.TProcessor;
 import org.apache.thrift.transport.TNonblockingServerSocket;
 import org.apache.zookeeper.WatchedEvent;
 import org.apache.zookeeper.Watcher;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 
 import java.net.InetSocketAddress;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.Timer;
 import java.util.TimerTask;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class GeneralRpcServer extends TNonblockingServer {
@@ -31,7 +28,7 @@ public class GeneralRpcServer extends TNonblockingServer {
 
     protected AtomicBoolean sessionExpired = new AtomicBoolean();
 
-    public GeneralRpcServer(TProcessor processor, String configPath) {
+    public GeneralRpcServer(TProcessor processor, String configPath, String deployPath, String codeUrlVersion, String hostname) {
         super(processor);
         config = new ConfigFile(configPath);
 
@@ -45,12 +42,21 @@ public class GeneralRpcServer extends TNonblockingServer {
 
         // sort out exit handler
 
+        // 获取额外的信息
+        String startTime = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date(System.currentTimeMillis()));
+        if (deployPath == null) {
+            deployPath = "";
+        }
+        if (codeUrlVersion == null) {
+            codeUrlVersion = "";
+        }
+
         String hostport = String.format("%s:%d", config.getFrontHost(), config.frontPort);
         String serviceId = ServiceEndpoint.getServiceId(hostport);
         endpoints = new ServiceEndpoint[this.productNames.length];
         int i = 0;
         for (String productName : this.productNames) {
-            ServiceEndpoint endpoint = new ServiceEndpoint(productName, serviceName, serviceId, hostport);
+            ServiceEndpoint endpoint = new ServiceEndpoint(productName, serviceName, serviceId, hostport, startTime, deployPath, hostname, codeUrlVersion);
             endpoints[i] = endpoint;
             i++;
         }

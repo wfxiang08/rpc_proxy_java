@@ -2,6 +2,7 @@ package me.chunyu.rpc_proxy.zk;
 
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.data.Stat;
+import org.json.JSONObject;
 
 public class ServiceEndpoint {
     String productName;
@@ -19,15 +20,25 @@ public class ServiceEndpoint {
         return result;
     }
 
-    public ServiceEndpoint(String productName, String serviceName, String serviceId, String endpoint) {
+    public ServiceEndpoint(String productName, String serviceName, String serviceId, String endpoint, String startTime,
+                           String deployPath, String hostname, String codeUrlVersion) {
         this.productName = productName;
         this.serviceName = serviceName;
         this.serviceId = serviceId;
         this.endpoint = endpoint;
 
-        String jsonData = String.format("{\"service\": \"%s\", \"service_id\": \"%s\", \"frontend\":\"%s\"}", this.serviceName, this.serviceId, this.endpoint);
+
+        JSONObject json = new JSONObject();
+        json.put("service", this.serviceName);
+        json.put("service_id", this.serviceId);
+        json.put("frontend", this.endpoint);
+        json.put("deploy_path", deployPath);
+        json.put("code_url_version", codeUrlVersion);
+        json.put("start_time", startTime);
+        json.put("hostname", hostname);
+
         try {
-            data = jsonData.getBytes("utf-8");
+            data = json.toString().getBytes("utf-8");
         } catch (Exception e) {
 
         }
