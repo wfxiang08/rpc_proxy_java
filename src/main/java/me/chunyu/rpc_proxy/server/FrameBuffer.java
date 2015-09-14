@@ -19,7 +19,7 @@ public class FrameBuffer {
     private static final Logger LOG = LoggerFactory.getLogger(FrameBuffer.class.getName());
 
 
-    protected static final AtomicLong readBufferBytesAllocated = new AtomicLong(0);
+//    protected static final AtomicLong readBufferBytesAllocated = new AtomicLong(0);
 
     // Transport, 直接负责数据的读写
     protected final TNonblockingTransport trans;
@@ -130,12 +130,12 @@ public class FrameBuffer {
 
                 // if this frame will push us over the memory limit, then return.
                 // with luck, more memory will free up the next time around.
-                if (readBufferBytesAllocated.get() + frameSize > maxReadBufferSize) {
-                    return true;
-                }
+//                if (readBufferBytesAllocated.get() + frameSize > maxReadBufferSize) {
+//                    return true;
+//                }
 
                 // increment the amount of memory allocated to read buffers
-                readBufferBytesAllocated.addAndGet(frameSize);
+//                readBufferBytesAllocated.addAndGet(frameSize);
 
                 // reallocate the readbuffer as a frame-sized buffer
                 // TODO: 每次来一个新的包，都会重新申请内存
@@ -191,8 +191,11 @@ public class FrameBuffer {
             ByteBuffer bufferW = null;
 
             bufferWriteLock.lock();
-            bufferW = buffersW.peek();
-            bufferWriteLock.unlock();
+            try {
+                bufferW = buffersW.peek();
+            } finally {
+                bufferWriteLock.unlock();
+            }
 
             if (bufferW != null) {
 //                LOG.info(Colors.red("bufferW Write"));
@@ -212,9 +215,11 @@ public class FrameBuffer {
                 // 如果当前的Node已经处理完毕，则直接输出
                 if (!bufferW.hasRemaining()) {
                     bufferWriteLock.lock();
-                    buffersW.pop();
-                    bufferWriteLock.unlock();
-
+                    try {
+                        buffersW.pop();
+                    } finally {
+                        bufferWriteLock.unlock();
+                    }
                 } else {
                     LOG.info(ansi().render("@|red Buffer is not write completely, wait for next round....., Write: " + n
                             + ", Remains: " + bufferW.remaining() + "|@").toString());
@@ -237,9 +242,9 @@ public class FrameBuffer {
     public void close() {
         // if we're being closed due to an error, we might have allocated a
         // buffer that we need to subtract for our memory accounting.
-        if (bufferR != null) {
-            readBufferBytesAllocated.addAndGet(-bufferR.array().length);
-        }
+//        if (bufferR != null) {
+//            readBufferBytesAllocated.addAndGet(-bufferR.array().length);
+//        }
         trans.close();
     }
 
